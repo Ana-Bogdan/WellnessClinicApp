@@ -89,8 +89,15 @@ The app is designed with a "sync-on-return" strategy, allowing users to perform 
 
 ## 6. App Mockup
 
-####  Home Page with List of Services, Appointments List Page, and Add an Appointment Page
+####  Home Page with List of Services
+<img width="395" height="1080" alt="image" src="https://github.com/user-attachments/assets/5ea9beb7-da8e-4719-afbf-83b1b7ef742a" />
 
-<img width="295" height="980" alt="image" src="https://github.com/user-attachments/assets/5ea9beb7-da8e-4719-afbf-83b1b7ef742a" />
-<img width="295" height="980" alt="image" src="https://github.com/user-attachments/assets/a30a8512-dea8-419d-a430-9b7420a3208c" />
-<img width="295" height="980" alt="image" src="https://github.com/user-attachments/assets/96d2600d-fb35-41fe-b0ac-70d8bcc54246" />
+---
+
+####  Appointments List Page, and Add an Appointment Page
+<img width="395" height="1080" alt="image" src="https://github.com/user-attachments/assets/a30a8512-dea8-419d-a430-9b7420a3208c" />
+
+---
+
+####  Add an Appointment Page
+<img width="395" height="1080" alt="image" src="https://github.com/user-attachments/assets/96d2600d-fb35-41fe-b0ac-70d8bcc54246" />

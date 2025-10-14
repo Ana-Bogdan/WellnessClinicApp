@@ -94,7 +94,7 @@ The app is designed with a "sync-on-return" strategy, allowing users to perform 
 
 ---
 
-####  Appointments List Page, and Add an Appointment Page
+####  Appointments List Page
 <img width="395" height="1080" alt="image" src="https://github.com/user-attachments/assets/a30a8512-dea8-419d-a430-9b7420a3208c" />
 
 ---

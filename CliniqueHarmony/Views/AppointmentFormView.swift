@@ -145,6 +145,7 @@ private struct PresetAppointmentBookingView: View {
     @State private var selectedTime: String?
     @State private var showCancelConfirmation = false
     @State private var localErrorMessage: String?
+    @State private var isProcessing = false
 
     init(mode: Mode) {
         self.mode = mode
@@ -192,9 +193,11 @@ private struct PresetAppointmentBookingView: View {
         ) {
             if case .edit(let appointment, _) = mode {
                 Button("Cancel Appointment", role: .destructive) {
-                    appState.cancelAppointment(id: appointment.id)
-                    showCancelConfirmation = false
-                    dismissWithMessage("Appointment canceled successfully.")
+                    Task {
+                        await appState.cancelAppointment(id: appointment.id)
+                        showCancelConfirmation = false
+                        dismiss()
+                    }
                 }
             }
             Button("Keep Appointment", role: .cancel) { }
@@ -305,15 +308,26 @@ private struct PresetAppointmentBookingView: View {
                     .frame(maxWidth: .infinity)
             }
 
-            Button(action: primaryAction) {
-                Text(mode.primaryActionTitle)
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Theme.primary)
-                    .foregroundStyle(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            Button(action: {
+                Task {
+                    await primaryAction()
+                }
+            }) {
+                HStack {
+                    if isProcessing {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    }
+                    Text(mode.primaryActionTitle)
+                        .font(.headline)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Theme.primary)
+                .foregroundStyle(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
+            .disabled(isProcessing)
 
             if showCancelButton {
                 Button(role: .destructive) {
@@ -335,7 +349,7 @@ private struct PresetAppointmentBookingView: View {
         }
     }
 
-    private func primaryAction() {
+    private func primaryAction() async {
         guard let selectedTime else {
             localErrorMessage = "Please select a time slot."
             return
@@ -351,37 +365,51 @@ private struct PresetAppointmentBookingView: View {
             return
         }
 
-        switch mode {
-        case .create(let practitioner, let service):
-            appState.createAppointment(
-                practitionerID: practitioner.id,
-                service: service,
-                date: appointmentDate,
-                status: .booked
-            )
-        case .edit(let appointment, let practitioner):
-            let updated = Appointment(
-                id: appointment.id,
-                userID: appointment.userID,
-                practitionerID: practitioner.id,
-                service: appointment.service,
-                date: appointmentDate,
-                status: appointment.status == .canceled ? .booked : appointment.status
-            )
-            appState.updateAppointment(updated)
-        }
-
+        isProcessing = true
         localErrorMessage = nil
-        appState.selectedTab = .appointments
-        dismissWithMessage(mode.successMessage)
-    }
 
-    private func dismissWithMessage(_ message: String) {
-        dismiss()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            appState.showAppointmentsBanner(message)
+        do {
+            switch mode {
+            case .create(let practitioner, let service):
+                await appState.createAppointment(
+                    practitionerID: practitioner.id,
+                    service: service,
+                    date: appointmentDate,
+                    status: .booked
+                )
+                
+                // Check for errors from repository
+                if let errorMsg = appState.appointmentsErrorMessage {
+                    localErrorMessage = errorMsg
+                    isProcessing = false
+                    return
+                }
+                
+            case .edit(let appointment, let practitioner):
+                let updated = Appointment(
+                    id: appointment.id,
+                    userID: appointment.userID,
+                    practitionerID: practitioner.id,
+                    service: appointment.service,
+                    date: appointmentDate,
+                    status: appointment.status == .canceled ? .booked : appointment.status
+                )
+                await appState.updateAppointment(updated)
+                
+                // Check for errors from repository
+                if let errorMsg = appState.appointmentsErrorMessage {
+                    localErrorMessage = errorMsg
+                    isProcessing = false
+                    return
+                }
+            }
+            
+            isProcessing = false
+            appState.selectedTab = .appointments
+            dismiss()
         }
     }
+
 }
 
 private struct AppointmentCreateFormView: View {
@@ -394,6 +422,7 @@ private struct AppointmentCreateFormView: View {
     @State private var selectedTimeSlot: String = ""
     @State private var selectedStatus: AppointmentStatus = .booked
     @State private var validationMessage: String?
+    @State private var isProcessing = false
 
     init() {
         _selectedPractitionerID = State(initialValue: "")
@@ -463,7 +492,12 @@ private struct AppointmentCreateFormView: View {
                 Button("Cancel") { dismiss() }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Save", action: save)
+                Button("Save") {
+                    Task {
+                        await save()
+                    }
+                }
+                .disabled(isProcessing)
             }
         }
         .onAppear {
@@ -481,7 +515,7 @@ private struct AppointmentCreateFormView: View {
         }
     }
 
-    private func save() {
+    private func save() async {
         validationMessage = nil
 
         guard !selectedPractitionerID.isEmpty,
@@ -511,18 +545,25 @@ private struct AppointmentCreateFormView: View {
             return
         }
 
-        appState.createAppointment(
+        isProcessing = true
+        
+        await appState.createAppointment(
             practitionerID: practitioner.id,
             service: service.title,
             date: combinedDate,
             status: selectedStatus
         )
+        
+        // Check for errors from repository
+        if let errorMsg = appState.appointmentsErrorMessage {
+            validationMessage = errorMsg
+            isProcessing = false
+            return
+        }
 
+        isProcessing = false
         appState.selectedTab = .appointments
         dismiss()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            appState.showAppointmentsBanner("Appointment created successfully!")
-        }
     }
 }
 

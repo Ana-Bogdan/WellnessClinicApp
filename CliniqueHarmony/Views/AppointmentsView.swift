@@ -58,7 +58,16 @@ struct AppointmentsView: View {
             .padding(.top, 16)
 
             List {
-                if appointmentsForSelectedFilter.isEmpty {
+                if appState.isLoadingAppointments {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .padding()
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                } else if appointmentsForSelectedFilter.isEmpty {
                     emptyState
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
@@ -113,6 +122,19 @@ struct AppointmentsView: View {
                 }
                 if appState.appointmentsBannerMessage == message {
                     appState.appointmentsBannerMessage = nil
+                }
+            }
+        }
+        .onChange(of: appState.appointmentsErrorMessage) { errorMessage in
+            if let errorMessage {
+                bannerMessage = errorMessage
+                withAnimation {
+                    showBanner = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    withAnimation {
+                        showBanner = false
+                    }
                 }
             }
         }
@@ -183,8 +205,10 @@ struct AppointmentsView: View {
     }
 
     private func delete(_ appointment: Appointment) {
-        appState.deleteAppointment(id: appointment.id)
-        appointmentPendingDeletion = nil
+        Task {
+            await appState.deleteAppointment(id: appointment.id)
+            appointmentPendingDeletion = nil
+        }
     }
 
     private var bannerOverlay: some View {

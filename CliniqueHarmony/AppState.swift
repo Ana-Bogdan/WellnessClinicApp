@@ -7,9 +7,11 @@ final class AppState: ObservableObject {
     @Published var user: User
     @Published var practitioners: [Practitioner]
     @Published var services: [Service]
-    @Published var appointments: [Appointment]
+    @Published var appointments: [Appointment] = []
     @Published var selectedTab: Tab = .home
     @Published var appointmentsBannerMessage: String?
+    @Published var appointmentsErrorMessage: String?
+    @Published var isLoadingAppointments: Bool = false
 
     enum Tab: String {
         case home
@@ -17,8 +19,17 @@ final class AppState: ObservableObject {
         case practitioners
         case profile
     }
+    
+    private let appointmentRepository: AppointmentRepository
+    private var cancellables = Set<AnyCancellable>()
 
-    init() {
+    init(appointmentRepository: AppointmentRepository? = nil) {
+        if let repository = appointmentRepository {
+            self.appointmentRepository = repository
+        } else {
+            self.appointmentRepository = AppointmentRepository()
+        }
+        
         self.user = User(
             id: "user-1",
             name: "Ana Bogdan",
@@ -26,6 +37,7 @@ final class AppState: ObservableObject {
             phone: "+40 752 119 963"
         )
 
+        // Practitioners and services remain in memory for now (can be moved to DB later)
         self.practitioners = [
             Practitioner(
                 id: "prac-1",
@@ -107,77 +119,109 @@ final class AppState: ObservableObject {
                 iconName: "brain.head.profile"
             )
         ]
-
-        let calendar = Calendar.current
-        let now = Date()
-        let upcoming = calendar.date(bySettingHour: 14, minute: 0, second: 0, of: calendar.date(byAdding: .day, value: 6, to: now) ?? now) ?? now
-        let completed1 = calendar.date(bySettingHour: 10, minute: 0, second: 0, of: calendar.date(byAdding: .day, value: -1, to: now) ?? now) ?? now
-        let completed2 = calendar.date(bySettingHour: 15, minute: 0, second: 0, of: calendar.date(byAdding: .day, value: -30, to: now) ?? now) ?? now
-
-        self.appointments = [
-            Appointment(
-                id: "apt-1",
-                userID: "user-1",
-                practitionerID: "prac-2",
-                service: "Deep Tissue Massage",
-                date: upcoming,
-                status: .booked
-            ),
-            Appointment(
-                id: "apt-2",
-                userID: "user-1",
-                practitionerID: "prac-1",
-                service: "Initial Consultation",
-                date: completed1,
-                status: .completed
-            ),
-            Appointment(
-                id: "apt-3",
-                userID: "user-1",
-                practitionerID: "prac-3",
-                service: "Initial Assessment",
-                date: completed2,
-                status: .completed
-            )
-        ]
+        
+        // Observe repository changes
+        self.appointmentRepository.$appointments
+            .assign(to: &$appointments)
+        
+        self.appointmentRepository.$errorMessage
+            .assign(to: &$appointmentsErrorMessage)
+        
+        self.appointmentRepository.$isLoading
+            .assign(to: &$isLoadingAppointments)
+        
+        // Load appointments from database on initialization (runs in background thread)
+        Task {
+            await self.appointmentRepository.loadAppointments()
+        }
     }
 
-    @discardableResult
+    /// Creates a new appointment in the database
+    /// The ID is managed by the database/app, user is not aware of internal ID
     func createAppointment(
         practitionerID: Practitioner.ID,
         service: String,
         date: Date,
         status: AppointmentStatus = .booked
-    ) -> Appointment {
-        let newAppointment = Appointment(
-            id: "apt-\(UUID().uuidString.prefix(8))",
+    ) async {
+        if await appointmentRepository.createAppointment(
             userID: user.id,
             practitionerID: practitionerID,
             service: service,
             date: date,
             status: status
+        ) != nil {
+            showAppointmentsBanner("Appointment created successfully!")
+        } else {
+            // Error message is already set in repository and will be displayed
+            if let errorMsg = appointmentRepository.errorMessage {
+                showAppointmentsBanner("Failed to create appointment: \(errorMsg)")
+            }
+        }
+    }
+
+    /// Updates an existing appointment in the database
+    /// The same entity is reused (not deleted and recreated), ID remains the same
+    func updateAppointment(_ updatedAppointment: Appointment) async {
+        if await appointmentRepository.updateAppointment(updatedAppointment) != nil {
+            showAppointmentsBanner("Appointment updated successfully!")
+        } else {
+            // Error message is already set in repository and will be displayed
+            if let errorMsg = appointmentRepository.errorMessage {
+                showAppointmentsBanner("Failed to update appointment: \(errorMsg)")
+            }
+        }
+    }
+
+    /// Deletes an appointment from the database using only its ID
+    func deleteAppointment(id: Appointment.ID) async {
+        let success = await appointmentRepository.deleteAppointment(id: id)
+        if success {
+            showAppointmentsBanner("Appointment deleted successfully!")
+        } else {
+            // Error message is already set in repository and will be displayed
+            if let errorMsg = appointmentRepository.errorMessage {
+                showAppointmentsBanner("Failed to delete appointment: \(errorMsg)")
+            }
+        }
+    }
+
+    /// Cancels an appointment by updating its status
+    func cancelAppointment(id: Appointment.ID) async {
+        guard let appointment = appointments.first(where: { $0.id == id }) else {
+            appointmentsErrorMessage = "Appointment not found"
+            return
+        }
+        
+        let canceledAppointment = Appointment(
+            id: appointment.id,
+            userID: appointment.userID,
+            practitionerID: appointment.practitionerID,
+            service: appointment.service,
+            date: appointment.date,
+            status: .canceled
         )
-        appointments.append(newAppointment)
-        return newAppointment
+        
+        await updateAppointment(canceledAppointment)
     }
 
-    func updateAppointment(_ updatedAppointment: Appointment) {
-        guard let index = appointments.firstIndex(where: { $0.id == updatedAppointment.id }) else { return }
-        appointments[index] = updatedAppointment
-    }
-
-    func deleteAppointment(id: Appointment.ID) {
-        appointments.removeAll { $0.id == id }
-    }
-
-    func cancelAppointment(id: Appointment.ID) {
-        guard let index = appointments.firstIndex(where: { $0.id == id }) else { return }
-        appointments[index].status = .canceled
-    }
-
-    func completeAppointment(id: Appointment.ID) {
-        guard let index = appointments.firstIndex(where: { $0.id == id }) else { return }
-        appointments[index].status = .completed
+    /// Completes an appointment by updating its status
+    func completeAppointment(id: Appointment.ID) async {
+        guard let appointment = appointments.first(where: { $0.id == id }) else {
+            appointmentsErrorMessage = "Appointment not found"
+            return
+        }
+        
+        let completedAppointment = Appointment(
+            id: appointment.id,
+            userID: appointment.userID,
+            practitionerID: appointment.practitionerID,
+            service: appointment.service,
+            date: appointment.date,
+            status: .completed
+        )
+        
+        await updateAppointment(completedAppointment)
     }
 
     func showAppointmentsBanner(_ message: String) {

@@ -122,13 +122,22 @@ final class AppState: ObservableObject {
         
         // Observe repository changes
         self.appointmentRepository.$appointments
-            .assign(to: &$appointments)
+            .sink { [weak self] appointments in
+                self?.appointments = appointments
+            }
+            .store(in: &cancellables)
         
         self.appointmentRepository.$errorMessage
-            .assign(to: &$appointmentsErrorMessage)
+            .sink { [weak self] errorMessage in
+                self?.appointmentsErrorMessage = errorMessage
+            }
+            .store(in: &cancellables)
         
         self.appointmentRepository.$isLoading
-            .assign(to: &$isLoadingAppointments)
+            .sink { [weak self] isLoading in
+                self?.isLoadingAppointments = isLoading
+            }
+            .store(in: &cancellables)
         
         // Load appointments from database on initialization (runs in background thread)
         Task {

@@ -22,7 +22,7 @@ enum AppointmentStatus: String, Codable, CaseIterable {
     case canceled = "Canceled"
 }
 
-struct Appointment: Identifiable, Hashable {
+struct Appointment: Identifiable, Hashable, Codable {
     let id: String
     var userID: String
     var practitionerID: String

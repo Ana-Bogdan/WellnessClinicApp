@@ -14,13 +14,13 @@ final class WebSocketClient {
 
     /// Callback for when an appointment is created on the server
     var onAppointmentCreated: ((Appointment) -> Void)?
-    
+
     /// Callback for when an appointment is updated on the server
     var onAppointmentUpdated: ((Appointment) -> Void)?
-    
+
     /// Callback for when an appointment is deleted on the server
     var onAppointmentDeleted: ((String) -> Void)?
-    
+
     /// Callback for when WebSocket successfully connects
     var onConnected: (() -> Void)?
 
@@ -34,7 +34,7 @@ final class WebSocketClient {
             logger.debug("WebSocket already connected or connecting")
             return
         }
-        
+
         // Enable reconnection attempts
         shouldAttemptReconnect = true
         isConnecting = true
@@ -89,7 +89,7 @@ final class WebSocketClient {
                         self.logger.info("WebSocket successfully connected")
                         self.onConnected?()
                     }
-                    
+
                     switch message {
                     case .string(let text):
                         self.handleMessage(text)

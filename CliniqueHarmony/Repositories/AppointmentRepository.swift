@@ -71,13 +71,13 @@ final class AppointmentRepository: ObservableObject {
                         let serverReachable = await self.serverClient.isServerAvailable()
                         if serverReachable {
                             self.logger.info("Server is reachable, connecting WebSocket")
-                            
+
                             // If server was unavailable and now it's back, trigger sync
                             let wasUnavailable = self.serverWasUnavailable
                             if wasUnavailable {
                                 self.serverWasUnavailable = false
                             }
-                            
+
                             self.webSocketClient.connect()
 
                             // If we haven't loaded from server yet, do it now
@@ -114,7 +114,7 @@ final class AppointmentRepository: ObservableObject {
                 }
             }
         }
-        
+
         webSocketClient.onAppointmentCreated = { [weak self] appointment in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
@@ -938,7 +938,7 @@ final class AppointmentRepository: ObservableObject {
             }
         }
     }
-    
+
     /// Checks if server is available and syncs local changes if server came back online
     /// This is called before CRUD operations to sync any pending local changes
     private func checkServerAndSyncIfNeeded() async {
@@ -946,60 +946,60 @@ final class AppointmentRepository: ObservableObject {
         guard serverWasUnavailable && hasLoadedFromServer else {
             return
         }
-        
+
         // Check if server is actually reachable
         let serverReachable = await serverClient.isServerAvailable()
         if serverReachable {
             logger.info("Server came back online (detected during operation), syncing local changes")
             serverWasUnavailable = false
-            
+
             // Connect WebSocket if not already connected
             webSocketClient.connect()
-            
+
             await syncAndReloadWhenServerComesOnline()
         }
     }
-    
+
     /// Public method to manually trigger sync if server is available
     /// Useful when server comes back online but network monitor didn't detect it
     func syncIfServerAvailable() async {
         logger.info("Manual sync requested")
         await checkServerAndSyncIfNeeded()
     }
-    
+
     /// Syncs local changes to server when server comes back online
     private func syncAndReloadWhenServerComesOnline() async {
         logger.info("Syncing local changes to server after reconnection")
-        
+
         // Get local appointments
         let localAppointments = await getLocalAppointments()
-        
+
         if localAppointments.isEmpty {
             logger.debug("No local appointments to sync, just reloading from server")
             await loadAppointmentsFromServer()
             return
         }
-        
+
         // Get server appointments
         do {
             let serverAppointments = try await serverClient.fetchAppointments()
             let serverIds = Set(serverAppointments.map { $0.id })
-            
+
             // Find local-only appointments (exist locally but not on server)
             // These are appointments created/updated while offline
             let localOnlyAppointments = localAppointments.filter { !serverIds.contains($0.id) }
-            
+
             if localOnlyAppointments.isEmpty {
                 logger.debug("No local-only appointments to sync, reloading from server")
                 await loadAppointmentsFromServer()
                 return
             }
-            
+
             logger.info("Found \(localOnlyAppointments.count) local-only appointment(s) to sync to server")
-            
+
             // Store old local IDs to delete them after sync (since server will assign new IDs)
             let oldLocalIds = Set(localOnlyAppointments.map { $0.id })
-            
+
             // Sync local-only appointments to server
             for appointment in localOnlyAppointments {
                 do {
@@ -1015,18 +1015,18 @@ final class AppointmentRepository: ObservableObject {
                     logger.error("Failed to sync local appointment \(appointment.id) to server: \(error.localizedDescription)")
                 }
             }
-            
+
             // Reload from server to get the merged state (with new server-assigned IDs)
             logger.info("Reloading appointments from server after sync")
             let syncedAppointments = try await serverClient.fetchAppointments()
             self.appointments = syncedAppointments.sorted { $0.date < $1.date }
-            
+
             // Delete old local entries (with local IDs) and sync new server data (with server IDs)
             await deleteLocalAppointmentsWithIds(oldLocalIds)
             await syncAppointmentsToLocalDB(syncedAppointments)
-            
+
             logger.info("Successfully synced local changes and reloaded from server")
-            
+
         } catch {
             logger.error("Failed to sync with server after reconnection: \(error.localizedDescription)")
             // Fall back to local data

@@ -34,6 +34,7 @@ actor ServerClient {
     }
 
     /// Fetches all appointments from the server
+    /// GET /appointments
     func fetchAppointments() async throws -> [Appointment] {
         let url = baseURL.appendingPathComponent("appointments")
         logger.debug("Fetching appointments from server: \(url.absoluteString)")
@@ -64,6 +65,7 @@ actor ServerClient {
 
     /// Creates a new appointment on the server
     /// Returns the created appointment with server-managed ID
+    /// POST /appointments
     func createAppointment(
         userID: String,
         practitionerID: String,
@@ -119,6 +121,7 @@ actor ServerClient {
 
     /// Updates an existing appointment on the server
     /// The server reuses the element (not delete+create), ID remains the same
+    /// PUT /appointments/{id}
     func updateAppointment(_ appointment: Appointment) async throws -> Appointment {
         let url = baseURL.appendingPathComponent("appointments").appendingPathComponent(appointment.id)
         logger.debug("Updating appointment on server: \(url.absoluteString)")
@@ -160,6 +163,7 @@ actor ServerClient {
     }
 
     /// Deletes an appointment from the server using only its ID
+    /// DELETE /appointments/{id}
     func deleteAppointment(id: String) async throws {
         let url = baseURL.appendingPathComponent("appointments").appendingPathComponent(id)
         logger.debug("Deleting appointment on server: \(url.absoluteString)")

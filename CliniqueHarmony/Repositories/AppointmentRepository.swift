@@ -363,10 +363,14 @@ final class AppointmentRepository: ObservableObject {
         errorMessage = nil
         logger.debug("Creating appointment - userID: \(userID), practitionerID: \(practitionerID), service: \(service)")
 
+        // Check if server came back online and sync if needed (before attempting to create)
+        await checkServerAndSyncIfNeeded()
+
         // Try server first if available
         if isServerAvailable {
             let serverReachable = await serverClient.isServerAvailable()
             if serverReachable {
+                serverWasUnavailable = false // Reset flag when server is reachable
                 do {
                     // Create a content hash to track this creation BEFORE the server call
                     // This way we can ignore the WebSocket message even if it arrives before we get the server response
@@ -451,10 +455,14 @@ final class AppointmentRepository: ObservableObject {
         errorMessage = nil
         logger.debug("Updating appointment with ID: \(appointment.id)")
 
+        // Check if server came back online and sync if needed (before attempting to update)
+        await checkServerAndSyncIfNeeded()
+
         // Try server first if available
         if isServerAvailable {
             let serverReachable = await serverClient.isServerAvailable()
             if serverReachable {
+                serverWasUnavailable = false // Reset flag when server is reachable
                 do {
                     // Server operations run on separate thread (ServerClient is an actor)
                     let updatedAppointment = try await serverClient.updateAppointment(appointment)
@@ -495,10 +503,14 @@ final class AppointmentRepository: ObservableObject {
         errorMessage = nil
         logger.debug("Deleting appointment with ID: \(id)")
 
+        // Check if server came back online and sync if needed (before attempting to delete)
+        await checkServerAndSyncIfNeeded()
+
         // Try server first if available
         if isServerAvailable {
             let serverReachable = await serverClient.isServerAvailable()
             if serverReachable {
+                serverWasUnavailable = false // Reset flag when server is reachable
                 do {
                     // Server operations run on separate thread (ServerClient is an actor)
                     // Only the ID is sent to the server
@@ -925,6 +937,34 @@ final class AppointmentRepository: ObservableObject {
                 }
             }
         }
+    }
+    
+    /// Checks if server is available and syncs local changes if server came back online
+    /// This is called before CRUD operations to sync any pending local changes
+    private func checkServerAndSyncIfNeeded() async {
+        // Only sync if we were offline and server is now available
+        guard serverWasUnavailable && hasLoadedFromServer else {
+            return
+        }
+        
+        // Check if server is actually reachable
+        let serverReachable = await serverClient.isServerAvailable()
+        if serverReachable {
+            logger.info("Server came back online (detected during operation), syncing local changes")
+            serverWasUnavailable = false
+            
+            // Connect WebSocket if not already connected
+            webSocketClient.connect()
+            
+            await syncAndReloadWhenServerComesOnline()
+        }
+    }
+    
+    /// Public method to manually trigger sync if server is available
+    /// Useful when server comes back online but network monitor didn't detect it
+    func syncIfServerAvailable() async {
+        logger.info("Manual sync requested")
+        await checkServerAndSyncIfNeeded()
     }
     
     /// Syncs local changes to server when server comes back online

@@ -19,7 +19,7 @@ final class AppState: ObservableObject {
         case practitioners
         case profile
     }
-    
+
     private let appointmentRepository: AppointmentRepository
     private var cancellables = Set<AnyCancellable>()
 
@@ -29,7 +29,7 @@ final class AppState: ObservableObject {
         } else {
             self.appointmentRepository = AppointmentRepository()
         }
-        
+
         self.user = User(
             id: "user-1",
             name: "Ana Bogdan",
@@ -119,26 +119,26 @@ final class AppState: ObservableObject {
                 iconName: "brain.head.profile"
             )
         ]
-        
+
         // Observe repository changes
         self.appointmentRepository.$appointments
             .sink { [weak self] appointments in
                 self?.appointments = appointments
             }
             .store(in: &cancellables)
-        
+
         self.appointmentRepository.$errorMessage
             .sink { [weak self] errorMessage in
                 self?.appointmentsErrorMessage = errorMessage
             }
             .store(in: &cancellables)
-        
+
         self.appointmentRepository.$isLoading
             .sink { [weak self] isLoading in
                 self?.isLoadingAppointments = isLoading
             }
             .store(in: &cancellables)
-        
+
         // Load appointments from database on initialization (runs in background thread)
         Task {
             await self.appointmentRepository.loadAppointments()
@@ -201,7 +201,7 @@ final class AppState: ObservableObject {
             appointmentsErrorMessage = "Appointment not found"
             return
         }
-        
+
         let canceledAppointment = Appointment(
             id: appointment.id,
             userID: appointment.userID,
@@ -210,7 +210,7 @@ final class AppState: ObservableObject {
             date: appointment.date,
             status: .canceled
         )
-        
+
         await updateAppointment(canceledAppointment)
     }
 
@@ -220,7 +220,7 @@ final class AppState: ObservableObject {
             appointmentsErrorMessage = "Appointment not found"
             return
         }
-        
+
         let completedAppointment = Appointment(
             id: appointment.id,
             userID: appointment.userID,
@@ -229,7 +229,7 @@ final class AppState: ObservableObject {
             date: appointment.date,
             status: .completed
         )
-        
+
         await updateAppointment(completedAppointment)
     }
 
